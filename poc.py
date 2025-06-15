@@ -20,10 +20,10 @@ llm = ChatOpenAI(model="gpt-4o", temperature=0)
 system_prompt = "You are a maths teacher marking a students maths paper. Use the following pieces of information to answer the paper using the provided mark scheme. If you are unsure or don't know the answer, say that you don't know."
 
 with open("answer.jpeg", "rb") as image_file:
-          image_data = base64.b64encode(image_file.read())
+          image_data = base64.b64encode(image_file.read()).decode("utf-8")
 
 with open("mark_scheme.pdf", "rb") as image_file:
-          pdf_data= base64.b64encode(image_file.read())
+          pdf_data= base64.b64encode(image_file.read()).decode("utf-8")
 
 messages = [
         SystemMessage(
@@ -33,21 +33,23 @@ messages = [
         HumanMessage(
             content=[
             {
-                "type": "image_url", 
-                "image_url": {"url": image_data}
+                "type": "image", 
+                "source_type": "base64",
+                "mime_type": "image/jpeg",
+                "data": image_data,
+            },
+            {
+                "type": "file", 
+                "source_type": "base64",
+                "mime_type": "application/pdf",
+                "data": pdf_data,
+                "filename": "mark_scheme",
             },
            ]
         )
 ]
 
-'''
-            {
-                "type": "image_url", 
-                "image_url": {"url": f"data:image/jpeg;base64,{pdf_data}"}
-            },
- 
-'''
-
 response = llm.invoke(messages)
 print(response)
+print(response.content)
 
