@@ -1,6 +1,7 @@
 import os
 import getpass
 import base64
+import pytesseract
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI 
 from langchain_core.prompts import ChatPromptTemplate
@@ -49,7 +50,20 @@ messages = [
         )
 ]
 
-response = llm.invoke(messages)
-print(response)
-print(response.content)
+def invoke(messages):
+    print('invoking llm')
+    response = llm.invoke(messages)
+    print(response)
+    print(response.content)
+
+def isFrontPage(filename):
+    print("Running ocr..")
+    str = pytesseract.image_to_string(filename)
+    if 'instructions' in str.lower():
+        print('is front page')
+    else:
+        print('mark')
+
+isFrontPage('front_page.JPG') # expect to be true
+isFrontPage('answer.jpeg') # expect to be false
 
