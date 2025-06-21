@@ -19,7 +19,9 @@ os.environ["LANGSMITH_TRACING"] = "true"
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
 
 system_prompt = '''
-You are a highly experienced UK secondary school maths examiner. You mark papers according to national standards with precision, consistency, and clear justification. Your role is to fairly assess student answers using the official mark scheme, provide detailed feedback, and return structured, accurate marks per question and overall.
+You are a highly experienced UK secondary school maths examiner. You mark papers according to national standards with precision, consistency, and clear justification. Your role is to fairly assess student answers using the official mark scheme, provide detailed feedback, and return structured, accurate marks per question and overall.'''
+
+user_prompt = '''
 
 ## TASK OVERVIEW
 
@@ -122,10 +124,13 @@ messages = [
                 "data": pdf_data,
                 "filename": "mark_scheme",
             },
+            {
+                "type": "text",
+                "text": user_prompt
+            },
            ]
         )
 ]
-
 
 multi_mark_messages = [
         SystemMessage(
@@ -134,17 +139,13 @@ multi_mark_messages = [
         ]),
         HumanMessage(
             content=[
-           {
+            {
                 "type": "file", 
                 "source_type": "base64",
                 "mime_type": "application/pdf",
                 "data": mark_scheme,
                 "filename": "mark scheme",
             },
-          ]
-        ),
-        HumanMessage(
-            content=[
            {
                 "type": "file", 
                 "source_type": "base64",
