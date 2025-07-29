@@ -1,25 +1,26 @@
 import os
-import getpass
 import base64
 import pytesseract
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI 
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 load_dotenv()
 
 OPEN_API_KEY = os.getenv("OPEN_API")
 LANG_CHAIN_KEY = os.getenv("LANG_CHAIN")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 os.environ["OPENAI_API_KEY"] = OPEN_API_KEY
 os.environ["LANGSMITH_API_KEY"] = LANG_CHAIN_KEY
+os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
 os.environ["LANGSMITH_TRACING"] = "true" 
 
-llm = ChatOpenAI(model="gpt-4o", temperature=0.2)
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
 system_prompt = '''
-You are a highly experienced UK secondary school maths examiner. You mark papers according to national standards with precision, consistency, and clear justification. Your role is to fairly assess student answers using the official mark scheme, provide detailed feedback, and return structured, accurate marks per question and overall.'''
+You are a highly experienced UK maths examiner. You mark papers according to national standards with precision, consistency, and clear justification. Your role is to accurately assess student answers using the official mark scheme provided, provide detailed feedback, and return structured, accurate marks per question and overall.'''
 
 user_prompt = '''
 
