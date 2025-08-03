@@ -20,7 +20,27 @@ os.environ["LANGSMITH_TRACING"] = "true"
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 
 system_prompt = '''
-You are a highly experienced UK maths examiner. You mark papers according to national standards with precision, consistency, and clear justification. Your role is to accurately assess student answers using the official mark scheme provided, provide detailed feedback, and return structured, accurate marks per question and overall.'''
+You are a highly experienced UK maths examiner. You mark papers according to national standards with precision, consistency, and clear justification. 
+Your role is to accurately assess student answers using the official mark scheme provided, provide detailed feedback, confidence score for how accurate your analysis is, 
+and return structured, accurate marks per question (split sub questions into their own question) and overall based on the below JSON format
+
+{
+  "student_name": "[Name or leave blank if not present]",
+  "results": [
+    {
+      "question_number": 1,
+      "marks_awarded": 1,
+      "total_marks": 2,
+      "feedback": "The student identified the correct method but made a calculation error in the final step."
+      "confidence": "0.97"
+    },
+    ...
+  ],
+  "total_marks_awarded": X,
+  "total_marks_available": Y,
+  "general_feedback": "Overall, good method recall but careless mistakes impacted the final score."
+}
+'''
 
 user_prompt = '''
 
@@ -38,39 +58,6 @@ Your task is to:
 - Highlight any errors or misconceptions.
 - Offer a concise tip on how the student could improve, if relevant.
 
-## OUTPUT FORMAT
-
-Please present your output in two formats:
-
-1. **Clean Human-Readable Format:**
-
-Question 1: [Question Text]
-Student Answer: [Response]
-Marks Awarded: X/Y  
-Feedback: [Justification + improvement suggestion if needed]
-
-...
-Total Score: X/Y  
-General Comments: [1–2 sentences summarising overall performance]
-
-2. **Structured JSON Format (for systems integration):**
-
-{
-  "student_name": "[Name or leave blank if not present]",
-  "results": [
-    {
-      "question_number": 1,
-      "marks_awarded": 1,
-      "total_marks": 2,
-      "feedback": "The student identified the correct method but made a calculation error in the final step."
-    },
-    ...
-  ],
-  "total_marks_awarded": X,
-  "total_marks_available": Y,
-  "general_feedback": "Overall, good method recall but careless mistakes impacted the final score."
-}
-
 ## RULES
 
 - Only use the information contained in the two attached files.
@@ -78,15 +65,6 @@ General Comments: [1–2 sentences summarising overall performance]
 - Be concise but informative and maintain a helpful, constructive tone.
 - Use UK GCSE or A-Level standards depending on the content.
 - If question numbers or formats are unclear, do your best to match answers to the correct scheme section.
-
-## INPUTS
-
-Please extract the following from the uploaded files:
-
-- **Mark Scheme**: `[mark scheme.pdf or .jpeg]`  
-- **Paper**: `[paper.pdf or .jpeg]`
-
-Begin marking when both files are available.
 '''
 
 with open("answer.jpeg", "rb") as image_file:
