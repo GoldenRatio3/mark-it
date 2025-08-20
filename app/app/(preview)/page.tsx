@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { experimental_useObject } from '@ai-sdk/react';
-import { questionsSchema } from '@/lib/schemas';
+import { markResultSchema } from '@/lib/schemas';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { FileUp, Plus, Loader2 } from 'lucide-react';
@@ -16,39 +15,19 @@ import {
 	CardDescription,
 } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import Quiz from '@/components/quiz';
+import MarkResult from '@/components/mark-result';
 import { AnimatePresence, motion } from 'framer-motion';
 
 export default function ChatWithFiles() {
 	const [files, setFiles] = useState<File[]>([]);
 	const [files2, setFiles2] = useState<File[]>([]);
-	const [questions, setQuestions] = useState<z.infer<typeof questionsSchema>>(
-		[]
-	);
+	const [markResult, setMarkResult] = useState<z.infer<
+		typeof markResultSchema
+	> | null>(null);
 	const [isDragging, setIsDragging] = useState(false);
 	const [isDragging2, setIsDragging2] = useState(false);
 
-	const {
-		submit,
-		object: partialQuestions,
-		isLoading,
-	} = experimental_useObject({
-		api: '/api/generate-quiz',
-		schema: questionsSchema,
-		initialValue: undefined,
-		onError: (error: unknown) => {
-			toast.error('Failed to generate quiz. Please try again.');
-			setFiles([]);
-			setFiles2([]);
-		},
-		onFinish: ({
-			object,
-		}: {
-			object: z.infer<typeof questionsSchema> | undefined;
-		}) => {
-			setQuestions(object ?? []);
-		},
-	});
+	const [isLoading, setIsLoading] = useState(false);
 
 	const handleFileChange = (
 		e: React.ChangeEvent<HTMLInputElement>,
@@ -87,28 +66,52 @@ export default function ChatWithFiles() {
 
 	const handleSubmitWithFiles = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
-		const allFiles = [...files, ...files2];
-		const encodedFiles = await Promise.all(
-			allFiles.map(async (file) => ({
-				name: file.name,
-				type: file.type,
-				data: await encodeFileAsBase64(file),
-			}))
-		);
-		submit({ files: encodedFiles });
+		setIsLoading(true);
+
+		try {
+			const allFiles = [...files, ...files2];
+			const encodedFiles = await Promise.all(
+				allFiles.map(async (file) => ({
+					name: file.name,
+					type: file.type,
+					data: await encodeFileAsBase64(file),
+				}))
+			);
+
+			const response = await fetch('/api/mark', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ files: encodedFiles }),
+			});
+
+			if (!response.ok) {
+				throw new Error('Failed to mark paper');
+			}
+
+			const result = await response.json();
+			setMarkResult(result);
+		} catch (error) {
+			toast.error('Failed to mark paper. Please try again.');
+			setFiles([]);
+			setFiles2([]);
+		} finally {
+			setIsLoading(false);
+		}
 	};
 
-	const clearPDF = () => {
+	const clearPDFs = () => {
 		setFiles([]);
 		setFiles2([]);
-		setQuestions([]);
+		setMarkResult(null);
 	};
 
-	const progress = partialQuestions ? (partialQuestions.length / 4) * 100 : 0;
+	const progress = isLoading ? 50 : 0;
 
 	// TODO: refactor component
-	if (questions.length === 4) {
-		return <Quiz title={'Paper'} questions={questions} clearPDF={clearPDF} />;
+	if (markResult && markResult.results.length > 0) {
+		return <MarkResult result={markResult} clearPDFs={clearPDFs} />;
 	}
 
 	return (
@@ -162,7 +165,7 @@ export default function ChatWithFiles() {
 					<div className="space-y-2">
 						<CardTitle className="text-2xl font-bold">MarkIt</CardTitle>
 						<CardDescription className="text-base">
-							Upload the papers and let us do the rest
+							Upload the mark scheme and student paper to get started
 						</CardDescription>
 					</div>
 				</CardHeader>
@@ -202,7 +205,7 @@ export default function ChatWithFiles() {
 											{files[0].name}
 										</span>
 									) : (
-										<span>Drop the papers here or click to browse.</span>
+										<span>Drop the mark scheme here or click to browse.</span>
 									)}
 								</p>
 							</div>
@@ -248,7 +251,7 @@ export default function ChatWithFiles() {
 						<Button
 							type="submit"
 							className="w-full"
-							disabled={files.length === 0 && files2.length === 0}
+							disabled={files.length === 0 || files2.length === 0}
 						>
 							{isLoading ? (
 								<span className="flex items-center space-x-2">
@@ -256,7 +259,7 @@ export default function ChatWithFiles() {
 									<span>Marking...</span>
 								</span>
 							) : (
-								'Mark It'
+								'Mark Paper'
 							)}
 						</Button>
 					</form>
@@ -278,9 +281,7 @@ export default function ChatWithFiles() {
 									}`}
 								/>
 								<span className="text-muted-foreground text-center col-span-4 sm:col-span-2">
-									{partialQuestions
-										? `Marking question ${partialQuestions.length + 1}`
-										: 'Analysing PDF content'}
+									Analysing PDF content...
 								</span>
 							</div>
 						</div>

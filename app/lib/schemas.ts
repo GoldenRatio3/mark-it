@@ -1,20 +1,39 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 export const questionSchema = z.object({
-  question: z.string(),
-  options: z
-    .array(z.string())
-    .length(4)
-    .describe(
-      "Four possible answers to the question. Only one should be correct. They should all be of equal lengths.",
-    ),
-  answer: z
-    .enum(["A", "B", "C", "D"])
-    .describe(
-      "The correct answer, where A is the first option, B is the second, and so on.",
-    ),
+	question: z.string(),
+	options: z
+		.array(z.string())
+		.length(4)
+		.describe(
+			'Four possible answers to the question. Only one should be correct. They should all be of equal lengths.'
+		),
+	answer: z
+		.enum(['A', 'B', 'C', 'D'])
+		.describe(
+			'The correct answer, where A is the first option, B is the second, and so on.'
+		),
 });
 
 export type Question = z.infer<typeof questionSchema>;
 
 export const questionsSchema = z.array(questionSchema).length(4);
+
+// Schema for marking results (based on poc.py structure)
+export const markResultSchema = z.object({
+	student_name: z.string(),
+	results: z.array(
+		z.object({
+			question_number: z.number(),
+			marks_awarded: z.number(),
+			total_marks: z.number(),
+			feedback: z.string(),
+			confidence: z.number(),
+		})
+	),
+	total_marks_awarded: z.number(),
+	total_marks_available: z.number(),
+	general_feedback: z.string(),
+});
+
+export type MarkResult = z.infer<typeof markResultSchema>;
