@@ -50,6 +50,12 @@ export default function MarkResult({ result, clearPDFs }: MarkResultProps) {
 							>
 								{percentage}%
 							</Badge>
+							{typeof result.overall_confidence === 'number' && (
+								<Badge variant="outline" className="text-lg px-4 py-2">
+									Overall Confidence:{' '}
+									{(result.overall_confidence * 100).toFixed(0)}%
+								</Badge>
+							)}
 						</div>
 					</div>
 				</CardHeader>

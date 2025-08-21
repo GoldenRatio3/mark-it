@@ -29,11 +29,30 @@ export const markResultSchema = z.object({
 			total_marks: z.number(),
 			feedback: z.string(),
 			confidence: z.number(),
+			confidence_breakdown: z
+				.object({
+					criteria_matched: z.number(),
+					total_criteria: z.number(),
+					confidence_score: z.number(),
+					partial_credit_details: z
+						.array(
+							z.object({
+								criterion: z.string(),
+								matched: z.boolean(),
+								partial_score: z.number(),
+								explanation: z.string(),
+							})
+						)
+						.optional(),
+					reasoning: z.string(),
+				})
+				.optional(),
 		})
 	),
 	total_marks_awarded: z.number(),
 	total_marks_available: z.number(),
 	general_feedback: z.string(),
+	overall_confidence: z.number().optional(),
 });
 
 export type MarkResult = z.infer<typeof markResultSchema>;

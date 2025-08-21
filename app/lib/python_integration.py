@@ -121,10 +121,41 @@ def run_visual_marking(args):
         }
         print(json.dumps(error_output, indent=2))
 
+def run_agreement_confidence(args):
+    """Run model agreement confidence calculation"""
+    try:
+        # Parse input data
+        if args.input_file:
+            with open(args.input_file, 'r') as f:
+                data = json.load(f)
+        else:
+            data = json.loads(args.input_data)
+
+        # Expect a list of { marks_awarded, total_marks }
+        marking_results = data.get('marking_results', [])
+
+        scorer = ConfidenceScorer()
+        confidence = scorer.calculate_model_agreement_confidence(marking_results)
+
+        output = {
+            'success': True,
+            'confidence_score': confidence
+        }
+
+        print(json.dumps(output, indent=2))
+
+    except Exception as e:
+        error_output = {
+            'success': False,
+            'error': str(e),
+            'confidence_score': 0.0
+        }
+        print(json.dumps(error_output, indent=2))
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(description='Mark-It Python Integration Script')
-    parser.add_argument('--mode', choices=['confidence', 'visual'], required=True,
+    parser.add_argument('--mode', choices=['confidence', 'visual', 'agreement'], required=True,
                        help='Mode to run: confidence scoring or visual marking')
     parser.add_argument('--input-file', help='Path to input JSON file')
     parser.add_argument('--input-data', help='Input JSON data as string')
@@ -145,6 +176,8 @@ def main():
         run_confidence_scoring(args)
     elif args.mode == 'visual':
         run_visual_marking(args)
+    elif args.mode == 'agreement':
+        run_agreement_confidence(args)
     
     # Redirect output to file if specified
     if args.output_file:
@@ -153,4 +186,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 

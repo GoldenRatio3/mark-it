@@ -105,7 +105,7 @@ def test_python_integration_script():
     print("=" * 50)
     
     try:
-        from python_integration import run_confidence_scoring, run_visual_marking
+        from python_integration import run_confidence_scoring, run_visual_marking, run_agreement_confidence
         
         # Test confidence scoring
         confidence_data = {
@@ -124,6 +124,7 @@ def test_python_integration_script():
         print("✅ Python integration script imported successfully")
         print("✅ Confidence scoring function available")
         print("✅ Visual marking function available")
+        print("✅ Agreement confidence function available")
         
         return True
         
@@ -172,4 +173,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

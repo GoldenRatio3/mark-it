@@ -1,8 +1,11 @@
 import { markResultSchema } from '@/lib/schemas';
+import { spawn } from 'child_process';
 import { google } from '@ai-sdk/google';
 import { generateObject } from 'ai';
+import path from 'path';
 
 export const maxDuration = 60;
+export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
 	const { files } = await req.json();
@@ -46,5 +49,79 @@ and return structured, accurate marks per question (split sub questions into the
 		schema: markResultSchema,
 	});
 
-	return Response.json(result.object);
+	// Compute overall confidence via Python agreement mode based on per-question marks
+	const markingResultsForAgreement = result.object.results.map((r) => ({
+		marks_awarded: r.marks_awarded,
+		total_marks: r.total_marks,
+	}));
+
+	const agreementConfidence = await new Promise<number>((resolve) => {
+		try {
+			const scriptPath = path.join(
+				process.cwd(),
+				'app',
+				'lib',
+				'python_integration.py'
+			);
+			const args = [
+				scriptPath,
+				'--mode',
+				'agreement',
+				'--input-data',
+				JSON.stringify({ marking_results: markingResultsForAgreement }),
+			];
+			const py = spawn('python3', args);
+
+			let out = '';
+			let err = '';
+			py.stdout.on('data', (d) => (out += d.toString()));
+			py.stderr.on('data', (d) => (err += d.toString()));
+
+			const timeout = setTimeout(() => {
+				try {
+					py.kill('SIGKILL');
+				} catch {}
+				resolve(0.0);
+			}, 8000);
+			py.on('close', () => {
+				clearTimeout(timeout);
+				if (err) {
+					console.error('Python agreement stderr:', err);
+				}
+				try {
+					const parsed = JSON.parse(out || '{}');
+					resolve(
+						typeof parsed.confidence_score === 'number'
+							? parsed.confidence_score
+							: 0.0
+					);
+				} catch {
+					resolve(0.0);
+				}
+			});
+		} catch {
+			resolve(0.0);
+		}
+	});
+
+	// Fallback to average per-question confidence if Python step fails
+	const averagePerQuestionConfidence = (() => {
+		const vals = result.object.results
+			.map((r: any) => r?.confidence)
+			.filter((v: any) => typeof v === 'number');
+		if (vals.length === 0) return 0.0;
+		return vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
+	})();
+
+	const overallConfidence =
+		agreementConfidence > 0
+			? agreementConfidence
+			: averagePerQuestionConfidence;
+
+	const responseObject = {
+		...result.object,
+		overall_confidence: overallConfidence,
+	};
+
+	return Response.json(responseObject);
 }
