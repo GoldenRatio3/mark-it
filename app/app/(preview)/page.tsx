@@ -17,6 +17,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import MarkResult from '@/components/mark-result';
 import { AnimatePresence, motion } from 'framer-motion';
+import { TeacherReview } from '@/components/teacher-review';
 
 export default function ChatWithFiles() {
 	const [files, setFiles] = useState<File[]>([]);
@@ -24,6 +25,13 @@ export default function ChatWithFiles() {
 	const [markResult, setMarkResult] = useState<z.infer<
 		typeof markResultSchema
 	> | null>(null);
+	const [reviewData, setReviewData] = useState<z.infer<
+		typeof markResultSchema
+	> | null>(null);
+	const [approvedQuestions, setApprovedQuestions] = useState<Set<number>>(
+		new Set()
+	);
+	const [isValidated, setIsValidated] = useState(false);
 	const [isDragging, setIsDragging] = useState(false);
 	const [isDragging2, setIsDragging2] = useState(false);
 
@@ -91,7 +99,10 @@ export default function ChatWithFiles() {
 			}
 
 			const result = await response.json();
-			setMarkResult(result);
+			setReviewData(result);
+			setMarkResult(null);
+			setApprovedQuestions(new Set());
+			setIsValidated(false);
 		} catch (error) {
 			toast.error('Failed to mark paper. Please try again.');
 			setFiles([]);
@@ -105,13 +116,103 @@ export default function ChatWithFiles() {
 		setFiles([]);
 		setFiles2([]);
 		setMarkResult(null);
+		setReviewData(null);
+		setApprovedQuestions(new Set());
+		setIsValidated(false);
 	};
 
 	const progress = isLoading ? 50 : 0;
 
 	// TODO: refactor component
-	if (markResult && markResult.results.length > 0) {
+	if (isValidated && markResult && markResult.results.length > 0) {
 		return <MarkResult result={markResult} clearPDFs={clearPDFs} />;
+	}
+
+	// Handlers for the Teacher Review step
+	const handleApprove = (questionNumber: number) => {
+		setApprovedQuestions((prev) => new Set(prev).add(questionNumber));
+	};
+
+	const handleBatchApprove = (confidenceThreshold: number) => {
+		if (!reviewData) return;
+		const next = new Set(approvedQuestions);
+		reviewData.results.forEach((q) => {
+			if (q.confidence >= confidenceThreshold) {
+				next.add(q.question_number);
+			}
+		});
+		setApprovedQuestions(next);
+	};
+
+	const handleOverride = (
+		questionNumber: number,
+		override: { marks_awarded: number; feedback: string; reason?: string }
+	) => {
+		if (!reviewData) return;
+		const updated = { ...reviewData, results: [...reviewData.results] };
+		const idx = updated.results.findIndex(
+			(q) => q.question_number === questionNumber
+		);
+		if (idx !== -1) {
+			updated.results[idx] = {
+				...updated.results[idx],
+				marks_awarded: override.marks_awarded,
+				feedback: override.feedback,
+			};
+			updated.total_marks_awarded = updated.results.reduce(
+				(sum, q) => sum + q.marks_awarded,
+				0
+			);
+			setReviewData(updated);
+			setApprovedQuestions((prev) => new Set(prev).add(questionNumber));
+		}
+	};
+
+	const handleFinalize = () => {
+		if (!reviewData) return;
+		setMarkResult(reviewData);
+		setIsValidated(true);
+	};
+
+	if (reviewData) {
+		const totalQuestions = reviewData.results.length;
+		const approvedCount = approvedQuestions.size;
+		return (
+			<div className="min-h-[100dvh] w-full flex flex-col items-center p-4">
+				<Card className="w-full max-w-6xl mb-4">
+					<CardHeader>
+						<CardTitle className="flex items-center justify-between">
+							<span>Review and Validate Marks</span>
+							<div className="flex items-center gap-3">
+								<span className="text-sm text-muted-foreground">
+									Approved {approvedCount} / {totalQuestions}
+								</span>
+								<Button
+									onClick={handleFinalize}
+									disabled={approvedCount < totalQuestions}
+									className="bg-green-600 hover:bg-green-700"
+								>
+									Finalize Results
+								</Button>
+							</div>
+						</CardTitle>
+					</CardHeader>
+					<CardContent>
+						<p className="text-sm text-muted-foreground">
+							Accept the suggested marks or edit them before finalizing.
+						</p>
+					</CardContent>
+				</Card>
+
+				<TeacherReview
+					markingResult={reviewData}
+					onApprove={handleApprove}
+					onOverride={handleOverride}
+					onBatchApprove={handleBatchApprove}
+					approvedQuestionNumbers={approvedQuestions}
+				/>
+			</div>
+		);
 	}
 
 	return (

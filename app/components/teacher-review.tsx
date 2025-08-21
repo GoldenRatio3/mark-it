@@ -13,6 +13,7 @@ interface TeacherReviewProps {
 	onApprove: (questionNumber: number) => void;
 	onOverride: (questionNumber: number, override: any) => void;
 	onBatchApprove: (confidenceThreshold: number) => void;
+	approvedQuestionNumbers?: Set<number>;
 }
 
 export function TeacherReview({
@@ -20,6 +21,7 @@ export function TeacherReview({
 	onApprove,
 	onOverride,
 	onBatchApprove,
+	approvedQuestionNumbers,
 }: TeacherReviewProps) {
 	const [confidenceThreshold, setConfidenceThreshold] = useState(0.8);
 	const [expandedQuestions, setExpandedQuestions] = useState<Set<number>>(
@@ -125,6 +127,9 @@ export function TeacherReview({
 						}
 						onApprove={() => onApprove(question.question_number)}
 						onOverride={onOverride}
+						isApproved={
+							approvedQuestionNumbers?.has(question.question_number) ?? false
+						}
 					/>
 				))}
 			</div>
@@ -138,6 +143,7 @@ interface QuestionReviewCardProps {
 	onToggleExpansion: () => void;
 	onApprove: () => void;
 	onOverride: (questionNumber: number, override: any) => void;
+	isApproved: boolean;
 }
 
 function QuestionReviewCard({
@@ -146,6 +152,7 @@ function QuestionReviewCard({
 	onToggleExpansion,
 	onApprove,
 	onOverride,
+	isApproved,
 }: QuestionReviewCardProps) {
 	const [showOverrideForm, setShowOverrideForm] = useState(false);
 	const [overrideMarks, setOverrideMarks] = useState(question.marks_awarded);
@@ -201,10 +208,11 @@ function QuestionReviewCard({
 						</Button>
 						<Button
 							onClick={onApprove}
-							className="bg-green-600 hover:bg-green-700"
+							className="bg-green-600 hover:bg-green-700 disabled:opacity-60"
 							size="sm"
+							disabled={isApproved}
 						>
-							Approve
+							{isApproved ? 'Approved' : 'Approve'}
 						</Button>
 					</div>
 				</div>
