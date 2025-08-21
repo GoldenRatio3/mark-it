@@ -1,4 +1,4 @@
-import { markResultSchema } from '@/lib/schemas';
+import { markResultSchema, markResultLLMSchema } from '@/lib/schemas';
 import { spawn } from 'child_process';
 import { google } from '@ai-sdk/google';
 import { generateObject } from 'ai';
@@ -46,8 +46,99 @@ and return structured, accurate marks per question (split sub questions into the
 				],
 			},
 		],
-		schema: markResultSchema,
+		schema: markResultLLMSchema,
 	});
+
+	// Optionally run visual analysis for questions that include an image path and expected visual answer
+	try {
+		const visualTasks = (result.object?.results || []).map(
+			(r: any, idx: number) =>
+				new Promise<{ idx: number; payload: any } | null>((resolve) => {
+					if (!r?.image_path || !r?.expected_visual_answer) {
+						return resolve(null);
+					}
+					try {
+						const scriptPath = path.join(
+							process.cwd(),
+							'lib',
+							'python_integration.py'
+						);
+						const args = [
+							scriptPath,
+							'--mode',
+							'visual',
+							'--input-data',
+							JSON.stringify({
+								image_path: r.image_path,
+								expected_answer: r.expected_visual_answer,
+								grid_spacing: 50.0,
+							}),
+						];
+						console.log('[visual] Invoking python3', {
+							scriptPath,
+							cwd: process.cwd(),
+							args,
+						});
+						const py = spawn('python3', args);
+
+						let out = '';
+						let err = '';
+						py.stdout.on('data', (d) => (out += d.toString()));
+						py.stderr.on('data', (d) => (err += d.toString()));
+
+						const timeout = setTimeout(() => {
+							try {
+								py.kill('SIGKILL');
+							} catch {}
+							resolve(null);
+						}, 8000);
+
+						py.on('close', () => {
+							clearTimeout(timeout);
+							if (err) {
+								console.error('[visual] Python stderr:', err.slice(0, 500));
+							}
+							console.log('[visual] Python stdout:', out.slice(0, 500));
+							try {
+								const parsed = JSON.parse(out || '{}');
+								resolve({ idx, payload: parsed });
+							} catch {
+								console.warn('[visual] Failed to parse python stdout as JSON');
+								resolve(null);
+							}
+						});
+					} catch {
+						console.error('[visual] Failed to spawn python3');
+						resolve(null);
+					}
+				})
+		);
+
+		const visualResults = await Promise.all(visualTasks);
+		visualResults.forEach((res) => {
+			if (!res) return;
+			const { idx, payload } = res;
+			const q: any = result.object.results[idx];
+			if (!q) return;
+			q.visual_analysis = {
+				confidence: payload?.confidence,
+				feedback: payload?.feedback,
+				geometric_accuracy: payload?.geometric_accuracy || null,
+				detected_shapes: payload?.detected_shapes || [],
+			};
+			if (
+				typeof payload?.confidence === 'number' &&
+				typeof q.confidence === 'number'
+			) {
+				q.confidence = Math.max(
+					0,
+					Math.min(1, (q.confidence + payload.confidence) / 2)
+				);
+			}
+		});
+	} catch (e) {
+		console.error('Visual analysis step failed:', e);
+	}
 
 	// Compute overall confidence via Python agreement mode based on per-question marks
 	const markingResultsForAgreement = result.object.results.map((r) => ({
@@ -59,7 +150,6 @@ and return structured, accurate marks per question (split sub questions into the
 		try {
 			const scriptPath = path.join(
 				process.cwd(),
-				'app',
 				'lib',
 				'python_integration.py'
 			);
@@ -70,6 +160,11 @@ and return structured, accurate marks per question (split sub questions into the
 				'--input-data',
 				JSON.stringify({ marking_results: markingResultsForAgreement }),
 			];
+			console.log('[agreement] Invoking python3', {
+				scriptPath,
+				cwd: process.cwd(),
+				args,
+			});
 			const py = spawn('python3', args);
 
 			let out = '';
@@ -86,8 +181,9 @@ and return structured, accurate marks per question (split sub questions into the
 			py.on('close', () => {
 				clearTimeout(timeout);
 				if (err) {
-					console.error('Python agreement stderr:', err);
+					console.error('[agreement] Python stderr:', err.slice(0, 500));
 				}
+				console.log('[agreement] Python stdout:', out.slice(0, 500));
 				try {
 					const parsed = JSON.parse(out || '{}');
 					resolve(
@@ -96,10 +192,12 @@ and return structured, accurate marks per question (split sub questions into the
 							: 0.0
 					);
 				} catch {
+					console.warn('[agreement] Failed to parse python stdout as JSON');
 					resolve(0.0);
 				}
 			});
 		} catch {
+			console.error('[agreement] Failed to spawn python3');
 			resolve(0.0);
 		}
 	});
@@ -113,15 +211,29 @@ and return structured, accurate marks per question (split sub questions into the
 		return vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
 	})();
 
-	const overallConfidence =
-		agreementConfidence > 0
-			? agreementConfidence
-			: averagePerQuestionConfidence;
+	const useFallback = !(agreementConfidence > 0);
+	if (useFallback) {
+		console.warn('[overall] Using fallback average per-question confidence');
+	}
+	const overallConfidence = useFallback
+		? averagePerQuestionConfidence
+		: agreementConfidence;
 
-	const responseObject = {
-		...result.object,
+	// Coerce/augment to full app schema shape
+	const appShape = {
+		student_name: result.object.student_name,
+		results: (result.object.results as any[]).map((r) => ({
+			question_number: r.question_number,
+			marks_awarded: r.marks_awarded,
+			total_marks: r.total_marks,
+			feedback: r.feedback,
+			confidence: r.confidence,
+		})),
+		total_marks_awarded: result.object.total_marks_awarded,
+		total_marks_available: result.object.total_marks_available,
+		general_feedback: result.object.general_feedback,
 		overall_confidence: overallConfidence,
 	};
 
-	return Response.json(responseObject);
+	return Response.json(appShape);
 }

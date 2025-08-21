@@ -12,16 +12,11 @@ from pathlib import Path
 # Add the current directory to Python path
 sys.path.append(str(Path(__file__).parent))
 
-try:
-    from confidence_scorer import ConfidenceScorer, Criterion
-    from visual_marking import VisualMarker
-except ImportError as e:
-    print(f"Error importing modules: {e}")
-    sys.exit(1)
-
 def run_confidence_scoring(args):
     """Run confidence scoring analysis"""
     try:
+        # Lazy imports to avoid unnecessary hard dependencies (e.g., cv2)
+        from confidence_scorer import ConfidenceScorer, Criterion
         # Parse input data
         if args.input_file:
             with open(args.input_file, 'r') as f:
@@ -81,6 +76,8 @@ def run_confidence_scoring(args):
 def run_visual_marking(args):
     """Run visual marking analysis"""
     try:
+        # Import only when visual mode is requested to avoid cv2 requirement for other modes
+        from visual_marking import VisualMarker
         # Parse input data
         if args.input_file:
             with open(args.input_file, 'r') as f:
@@ -124,6 +121,8 @@ def run_visual_marking(args):
 def run_agreement_confidence(args):
     """Run model agreement confidence calculation"""
     try:
+        # Lazy import to avoid importing visual dependencies
+        from confidence_scorer import ConfidenceScorer
         # Parse input data
         if args.input_file:
             with open(args.input_file, 'r') as f:
