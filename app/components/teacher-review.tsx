@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { MarkResult } from '@/lib/schemas';
 
 interface TeacherReviewProps {
@@ -65,10 +67,10 @@ export function TeacherReview({
 						<span>Teacher Review Dashboard</span>
 						<div className="flex items-center gap-4">
 							<div className="flex items-center gap-2">
-								<span className="text-sm text-gray-600">
-									Confidence Threshold:
-								</span>
-								<input
+								<Label className="text-sm text-muted-foreground">
+									Confidence Threshold
+								</Label>
+								<Input
 									type="range"
 									min="0.5"
 									max="1.0"
@@ -77,14 +79,13 @@ export function TeacherReview({
 									onChange={(e) =>
 										setConfidenceThreshold(parseFloat(e.target.value))
 									}
-									className="w-24"
+									className="w-28"
 								/>
-								<span className="text-sm font-mono">{confidenceThreshold}</span>
+								<Badge variant="outline" className="font-mono">
+									{confidenceThreshold.toFixed(2)}
+								</Badge>
 							</div>
-							<Button
-								onClick={() => onBatchApprove(confidenceThreshold)}
-								className="bg-green-600 hover:bg-green-700"
-							>
+							<Button onClick={() => onBatchApprove(confidenceThreshold)}>
 								Batch Approve High Confidence ({highConfidenceQuestions}/
 								{totalQuestions})
 							</Button>
@@ -94,45 +95,51 @@ export function TeacherReview({
 				<CardContent>
 					<div className="grid grid-cols-3 gap-4">
 						<div className="text-center">
-							<div className="text-2xl font-bold text-green-600">
+							<div className="text-2xl font-bold text-foreground">
 								{highConfidenceQuestions}
 							</div>
-							<div className="text-sm text-gray-600">High Confidence</div>
+							<div className="text-sm text-muted-foreground">
+								High Confidence
+							</div>
 						</div>
 						<div className="text-center">
-							<div className="text-2xl font-bold text-yellow-600">
+							<div className="text-2xl font-bold text-foreground">
 								{totalQuestions - highConfidenceQuestions}
 							</div>
-							<div className="text-sm text-gray-600">Need Review</div>
+							<div className="text-sm text-muted-foreground">Need Review</div>
 						</div>
 						<div className="text-center">
-							<div className="text-2xl font-bold text-blue-600">
+							<div className="text-2xl font-bold text-foreground">
 								{markingResult.overall_confidence?.toFixed(2) || 'N/A'}
 							</div>
-							<div className="text-sm text-gray-600">Overall Confidence</div>
+							<div className="text-sm text-muted-foreground">
+								Overall Confidence
+							</div>
 						</div>
 					</div>
 				</CardContent>
 			</Card>
 
 			{/* Question Review List */}
-			<div className="space-y-4">
-				{markingResult.results.map((question) => (
-					<QuestionReviewCard
-						key={question.question_number}
-						question={question}
-						isExpanded={expandedQuestions.has(question.question_number)}
-						onToggleExpansion={() =>
-							toggleQuestionExpansion(question.question_number)
-						}
-						onApprove={() => onApprove(question.question_number)}
-						onOverride={onOverride}
-						isApproved={
-							approvedQuestionNumbers?.has(question.question_number) ?? false
-						}
-					/>
-				))}
-			</div>
+			<ScrollArea className="h-[70vh] pr-2">
+				<div className="space-y-4">
+					{markingResult.results.map((question) => (
+						<QuestionReviewCard
+							key={question.question_number}
+							question={question}
+							isExpanded={expandedQuestions.has(question.question_number)}
+							onToggleExpansion={() =>
+								toggleQuestionExpansion(question.question_number)
+							}
+							onApprove={() => onApprove(question.question_number)}
+							onOverride={onOverride}
+							isApproved={
+								approvedQuestionNumbers?.has(question.question_number) ?? false
+							}
+						/>
+					))}
+				</div>
+			</ScrollArea>
 		</div>
 	);
 }

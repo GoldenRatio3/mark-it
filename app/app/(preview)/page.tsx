@@ -184,13 +184,13 @@ export default function ChatWithFiles() {
 						<CardTitle className="flex items-center justify-between">
 							<span>Review and Validate Marks</span>
 							<div className="flex items-center gap-3">
-								<span className="text-sm text-muted-foreground">
-									Approved {approvedCount} / {totalQuestions}
+								<span className="text-sm text-muted-foreground">Approved</span>
+								<span className="text-sm font-mono">
+									{approvedCount} / {totalQuestions}
 								</span>
 								<Button
 									onClick={handleFinalize}
 									disabled={approvedCount < totalQuestions}
-									className="bg-green-600 hover:bg-green-700"
 								>
 									Finalize Results
 								</Button>
