@@ -7,6 +7,15 @@ To run the example locally you need to:
 1. `npm install` to install the required dependencies.
 2. `npm run dev` to launch the development server.
 
+## Benchmarking
+
+- to run the benchmark `python3 benchmark.py [apps marks] [correct marks]`
+
+Teacher marked: ~95% (https://www.gov.uk/government/statistics/reviews-of-marking-and-moderation-for-gcse-as-and-a-level-summer-2024-exam-series/reviews-of-marking-and-moderation-for-gcse-as-and-a-level-summer-2024-exam-series?utm_source=chatgpt.com)
+Zero shot: 93%
+Multi shot: ?%
+Q W/Context shot: ?%
+
 ## Learn More
 
 To learn more about Vercel AI SDK or Next.js take a look at the following resources:
@@ -14,4 +23,3 @@ To learn more about Vercel AI SDK or Next.js take a look at the following resour
 - [AI SDK docs](https://sdk.vercel.ai/docs)
 - [Vercel AI Playground](https://play.vercel.ai)
 - [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-
