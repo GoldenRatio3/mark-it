@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { markResultSchema } from '@/lib/schemas';
 import { z } from 'zod';
 import { toast } from 'sonner';
@@ -17,21 +17,16 @@ import {
 import { Progress } from '@/components/ui/progress';
 import MarkResult from '@/components/mark-result';
 import { AnimatePresence, motion } from 'framer-motion';
-import { TeacherReview } from '@/components/teacher-review';
 
 export default function ChatWithFiles() {
 	const [files, setFiles] = useState<File[]>([]);
 	const [files2, setFiles2] = useState<File[]>([]);
+	const [schemePdfUrl, setSchemePdfUrl] = useState<string | null>(null);
+	const [studentPdfUrl, setStudentPdfUrl] = useState<string | null>(null);
 	const [markResult, setMarkResult] = useState<z.infer<
 		typeof markResultSchema
 	> | null>(null);
-	const [reviewData, setReviewData] = useState<z.infer<
-		typeof markResultSchema
-	> | null>(null);
-	const [approvedQuestions, setApprovedQuestions] = useState<Set<number>>(
-		new Set()
-	);
-	const [isValidated, setIsValidated] = useState(false);
+
 	const [isDragging, setIsDragging] = useState(false);
 	const [isDragging2, setIsDragging2] = useState(false);
 
@@ -62,6 +57,27 @@ export default function ChatWithFiles() {
 
 		setFilesFunction(validFiles);
 	};
+
+	// Create/revoke object URLs for quick linking to specific pages
+	useEffect(() => {
+		if (files.length > 0) {
+			const url = URL.createObjectURL(files[0]);
+			setSchemePdfUrl(url);
+			return () => URL.revokeObjectURL(url);
+		} else {
+			setSchemePdfUrl(null);
+		}
+	}, [files]);
+
+	useEffect(() => {
+		if (files2.length > 0) {
+			const url = URL.createObjectURL(files2[0]);
+			setStudentPdfUrl(url);
+			return () => URL.revokeObjectURL(url);
+		} else {
+			setStudentPdfUrl(null);
+		}
+	}, [files2]);
 
 	const encodeFileAsBase64 = (file: File): Promise<string> => {
 		return new Promise((resolve, reject) => {
@@ -99,10 +115,7 @@ export default function ChatWithFiles() {
 			}
 
 			const result = await response.json();
-			setReviewData(result);
-			setMarkResult(null);
-			setApprovedQuestions(new Set());
-			setIsValidated(false);
+			setMarkResult(result);
 		} catch (error) {
 			toast.error('Failed to mark paper. Please try again.');
 			setFiles([]);
@@ -116,102 +129,24 @@ export default function ChatWithFiles() {
 		setFiles([]);
 		setFiles2([]);
 		setMarkResult(null);
-		setReviewData(null);
-		setApprovedQuestions(new Set());
-		setIsValidated(false);
+		if (schemePdfUrl) URL.revokeObjectURL(schemePdfUrl);
+		if (studentPdfUrl) URL.revokeObjectURL(studentPdfUrl);
+		setSchemePdfUrl(null);
+		setStudentPdfUrl(null);
 	};
 
 	const progress = isLoading ? 50 : 0;
 
-	// TODO: refactor component
-	if (isValidated && markResult && markResult.results.length > 0) {
-		return <MarkResult result={markResult} clearPDFs={clearPDFs} />;
-	}
-
-	// Handlers for the Teacher Review step
-	const handleApprove = (questionNumber: number) => {
-		setApprovedQuestions((prev) => new Set(prev).add(questionNumber));
-	};
-
-	const handleBatchApprove = (confidenceThreshold: number) => {
-		if (!reviewData) return;
-		const next = new Set(approvedQuestions);
-		reviewData.results.forEach((q) => {
-			if (q.confidence >= confidenceThreshold) {
-				next.add(q.question_number);
-			}
-		});
-		setApprovedQuestions(next);
-	};
-
-	const handleOverride = (
-		questionNumber: number,
-		override: { marks_awarded: number; feedback: string; reason?: string }
-	) => {
-		if (!reviewData) return;
-		const updated = { ...reviewData, results: [...reviewData.results] };
-		const idx = updated.results.findIndex(
-			(q) => q.question_number === questionNumber
-		);
-		if (idx !== -1) {
-			updated.results[idx] = {
-				...updated.results[idx],
-				marks_awarded: override.marks_awarded,
-				feedback: override.feedback,
-			};
-			updated.total_marks_awarded = updated.results.reduce(
-				(sum, q) => sum + q.marks_awarded,
-				0
-			);
-			setReviewData(updated);
-			setApprovedQuestions((prev) => new Set(prev).add(questionNumber));
-		}
-	};
-
-	const handleFinalize = () => {
-		if (!reviewData) return;
-		setMarkResult(reviewData);
-		setIsValidated(true);
-	};
-
-	if (reviewData) {
-		const totalQuestions = reviewData.results.length;
-		const approvedCount = approvedQuestions.size;
+	// Show results directly when available
+	if (markResult && markResult.results.length > 0) {
 		return (
-			<div className="min-h-[100dvh] w-full flex flex-col items-center p-4">
-				<Card className="w-full max-w-6xl mb-4">
-					<CardHeader>
-						<CardTitle className="flex items-center justify-between">
-							<span>Review and Validate Marks</span>
-							<div className="flex items-center gap-3">
-								<span className="text-sm text-muted-foreground">Approved</span>
-								<span className="text-sm font-mono">
-									{approvedCount} / {totalQuestions}
-								</span>
-								<Button
-									onClick={handleFinalize}
-									disabled={approvedCount < totalQuestions}
-								>
-									Finalize Results
-								</Button>
-							</div>
-						</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<p className="text-sm text-muted-foreground">
-							Accept the suggested marks or edit them before finalizing.
-						</p>
-					</CardContent>
-				</Card>
-
-				<TeacherReview
-					markingResult={reviewData}
-					onApprove={handleApprove}
-					onOverride={handleOverride}
-					onBatchApprove={handleBatchApprove}
-					approvedQuestionNumbers={approvedQuestions}
-				/>
-			</div>
+			<MarkResult
+				result={markResult}
+				clearPDFs={clearPDFs}
+				schemePdfUrl={schemePdfUrl || undefined}
+				studentPdfUrl={studentPdfUrl || undefined}
+				onUpdateResult={setMarkResult}
+			/>
 		);
 	}
 
@@ -306,7 +241,9 @@ export default function ChatWithFiles() {
 											{files[0].name}
 										</span>
 									) : (
-										<span>Drop the mark scheme here or click to browse.</span>
+										<span>
+											Drop the student's paper here or click to browse.
+										</span>
 									)}
 								</p>
 							</div>
