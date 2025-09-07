@@ -13,7 +13,7 @@ To run the example locally you need to:
 
 Teacher marked: ~90% (https://www.gov.uk/government/statistics/reviews-of-marking-and-moderation-for-gcse-as-and-a-level-summer-2024-exam-series/reviews-of-marking-and-moderation-for-gcse-as-and-a-level-summer-2024-exam-series?utm_source=chatgpt.com)
 Zero shot: 93%
-Multi shot: ?%
+Multi shot: 88%
 Q W/Context shot: ?%
 
 ## Learn More
