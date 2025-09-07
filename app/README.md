@@ -9,7 +9,7 @@ To run the example locally you need to:
 
 ## Benchmarking
 
-- to run the benchmark `python3 benchmark.py [apps marks] [correct marks]`
+- to run the benchmark `python3 benchmark.py [benchmark folder]` w/ benchmark folder containing correct result to app result pairs in the standard format `example_1_correct_result.json` and `example_1_app_result.json`
 
 Teacher marked: ~95% (https://www.gov.uk/government/statistics/reviews-of-marking-and-moderation-for-gcse-as-and-a-level-summer-2024-exam-series/reviews-of-marking-and-moderation-for-gcse-as-and-a-level-summer-2024-exam-series?utm_source=chatgpt.com)
 Zero shot: 93%
