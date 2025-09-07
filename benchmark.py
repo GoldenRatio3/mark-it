@@ -72,6 +72,7 @@ if __name__ == "__main__":
     print("\n--- API Benchmark for all examples ---")
     # Find all example sets by looking for *_correct_result.json
     example_prefixes = [f.replace('_correct_result.json', '') for f in os.listdir(folder) if f.endswith('_correct_result.json')]
+    example_prefixes.sort()
     endpoint_url = 'http://localhost:3000/api/mark'
     all_overall = []
     for prefix in example_prefixes:
