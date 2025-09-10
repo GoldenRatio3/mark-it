@@ -9,6 +9,7 @@ export const markResultSchema = z.object({
 			marks_awarded: z.number(),
 			total_marks: z.number(),
 			feedback: z.string(),
+			reason: z.string(),
 			confidence: z.number(),
 			question_type: z.string().optional(),
 			expected_visual_answer: z
@@ -85,6 +86,7 @@ export const markResultLLMSchema = z.object({
 			marks_awarded: z.number(),
 			total_marks: z.number(),
 			feedback: z.string(),
+			reason: z.string(),
 			confidence: z.number(),
 		})
 	),

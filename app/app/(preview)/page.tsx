@@ -110,14 +110,21 @@ export default function ChatWithFiles() {
 				body: JSON.stringify({ files: encodedFiles }),
 			});
 
+			let errorMsg = '';
 			if (!response.ok) {
-				throw new Error('Failed to mark paper');
+				try {
+					const errorData = await response.json();
+					errorMsg = errorData?.error || 'Failed to mark paper.';
+				} catch {
+					errorMsg = 'Failed to mark paper.';
+				}
+				throw new Error(errorMsg);
 			}
 
 			const result = await response.json();
 			setMarkResult(result);
-		} catch (error) {
-			toast.error('Failed to mark paper. Please try again.');
+		} catch (error: any) {
+			toast.error(error?.message || 'Failed to mark paper. Please try again.');
 			setFiles([]);
 			setFiles2([]);
 		} finally {

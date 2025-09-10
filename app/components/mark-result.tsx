@@ -86,6 +86,7 @@ interface MarkResultQuestion {
 	marks_awarded: number;
 	total_marks: number;
 	feedback: string;
+	reason: string;
 	confidence: number;
 	question_type?: string;
 	expected_visual_answer?: {
@@ -332,6 +333,12 @@ export default function MarkResult({
 										<p className="text-sm text-muted-foreground mb-2">
 											{question.feedback}
 										</p>
+										{question.reason && (
+											<p className="text-xs text-muted-foreground mb-2">
+												<span className="font-semibold">Reason:</span>{' '}
+												{question.reason}
+											</p>
+										)}
 										<Button
 											onClick={() => startEditing(question.question_number)}
 											variant="outline"
