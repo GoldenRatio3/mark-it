@@ -125,8 +125,7 @@ export default function ChatWithFiles() {
 			setMarkResult(result);
 		} catch (error: any) {
 			toast.error(error?.message || 'Failed to mark paper. Please try again.');
-			setFiles([]);
-			setFiles2([]);
+			// Do not clear files here; allow user to retry with same files
 		} finally {
 			setIsLoading(false);
 		}

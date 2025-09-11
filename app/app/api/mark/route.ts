@@ -1,19 +1,25 @@
-import { markResultSchema, markResultLLMSchema } from '@/lib/schemas';
-import { spawn } from 'child_process';
+import { markResultLLMSchema } from '@/lib/schemas';
 import { google } from '@ai-sdk/google';
 import { generateObject } from 'ai';
-import path from 'path';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
 
 export const maxDuration = 60;
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
 	try {
+		console.log('[POST] Marking request received');
 		const { files } = await req.json();
+		console.log(
+			'[POST] Files parsed:',
+			files?.map((f: { name?: string }) => f?.name || '[unnamed]')
+		);
 
 		// Expect two PDFs: mark scheme and student paper (order-agnostic, but we use first two provided)
 		const [fileA, fileB] = files ?? [];
 		if (!fileA || !fileB) {
+			console.warn('[POST] Missing files: fileA:', !!fileA, 'fileB:', !!fileB);
 			return Response.json(
 				{ error: 'Two files are required: mark scheme and student paper' },
 				{ status: 400 }
@@ -24,7 +30,8 @@ export async function POST(req: Request) {
 					Your role is to accurately assess student answers using the official mark scheme provided, provide detailed feedback, a reason why you have given that mark referencing the mark scheme criteria, return structured, accurate marks per question (split sub questions into their own result) and overall based on the provided JSON format, after marking reflect: if you re-read the answer and marking scheme, would you grade remain the same or not? If not, lower your confidence. Lets think step by step.`;
 
 		const userPrompt = `TASK OVERVIEW\n\nYou have been provided with two attached files:\n\n1. A Mark Scheme — the official marking criteria for a specific maths exam paper.\n2. A Student Paper — the scanned or typed answers submitted by a student.\n\nYour task is to:\n- Read and apply the mark scheme strictly when assessing the student paper.\n- Award full or partial marks per question based only on what is in the mark scheme.\n- Give a brief explanation (1–2 sentences) per question to justify your marking.\n- Highlight any errors or misconceptions.\n- Offer a concise tip on how the student could improve, if relevant.\n\nRULES\n\n- Only use the information contained in the two attached files.\n- Do not make assumptions outside the scope of the mark scheme.\n- Be concise but informative and maintain a helpful, constructive tone.`;
-		const markingPromises = Array.from({ length: 3 }).map(() =>
+		console.log('[POST] Starting marking models...');
+		const markingPromises = [
 			generateObject({
 				model: google('gemini-2.5-pro'),
 				messages: [
@@ -47,9 +54,59 @@ export async function POST(req: Request) {
 					},
 				],
 				schema: markResultLLMSchema,
-			})
-		);
+			}),
+			generateObject({
+				model: openai('gpt-5'),
+				messages: [
+					{ role: 'system', content: systemPrompt },
+					{
+						role: 'user',
+						content: [
+							{ type: 'text', text: userPrompt },
+							{
+								type: 'file',
+								data: fileA.data,
+								mediaType: fileA.type || 'application/pdf',
+							},
+							{
+								type: 'file',
+								data: fileB.data,
+								mediaType: fileB.type || 'application/pdf',
+							},
+						],
+					},
+				],
+				schema: markResultLLMSchema,
+			}),
+			generateObject({
+				model: google('gemini-2.5-pro'),
+				messages: [
+					{ role: 'system', content: systemPrompt },
+					{
+						role: 'user',
+						content: [
+							{ type: 'text', text: userPrompt },
+							{
+								type: 'file',
+								data: fileA.data,
+								mediaType: fileA.type || 'application/pdf',
+							},
+							{
+								type: 'file',
+								data: fileB.data,
+								mediaType: fileB.type || 'application/pdf',
+							},
+						],
+					},
+				],
+				schema: markResultLLMSchema,
+			}),
+		];
 		const results = await Promise.all(markingPromises);
+		console.log(
+			'[POST] Marking models completed. Results:',
+			results.map((r) => r?.object?.total_marks_awarded)
+		);
 
 		// Find the most common total_marks_awarded and total_marks_available
 		function mode(arr: any[]) {
@@ -67,6 +124,12 @@ export async function POST(req: Request) {
 		const availableArr = results.map((r) => r.object.total_marks_available);
 		const mostCommonAwarded = mode(awardedArr);
 		const mostCommonAvailable = mode(availableArr);
+		console.log(
+			'[POST] Most common awarded:',
+			mostCommonAwarded,
+			'Most common available:',
+			mostCommonAvailable
+		);
 
 		// Use the result with the most common score for feedback/details
 		const chosenIdx = results.findIndex(
@@ -118,8 +181,16 @@ export async function POST(req: Request) {
 				// All agree, keep confidence
 				chosenResult.results[i].confidence = avgConfidence;
 			} else if (uniqueQScores === 2) {
+				console.log(
+					`[POST] Question ${i + 1} has 2 unique scores, lowering confidence.`
+				);
 				chosenResult.results[i].confidence = avgConfidence * 0.7;
 			} else {
+				console.log(
+					`[POST] Question ${
+						i + 1
+					} has >2 unique scores, lowering confidence further.`
+				);
 				chosenResult.results[i].confidence = avgConfidence * 0.4;
 			}
 		}
@@ -132,6 +203,7 @@ export async function POST(req: Request) {
 			if (vals.length === 0) return 0.0;
 			return vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
 		})();
+		console.log('[POST] Overall confidence:', overallConfidence);
 
 		// Coerce/augment to full app schema shape without debug info
 		const appShape = {
@@ -149,6 +221,7 @@ export async function POST(req: Request) {
 			general_feedback: chosenResult.general_feedback,
 			overall_confidence: overallConfidence,
 		};
+		console.log('[POST] Returning result:', appShape);
 
 		return Response.json(appShape);
 	} catch (err: any) {
