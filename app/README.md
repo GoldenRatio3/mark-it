@@ -15,6 +15,8 @@ Teacher marked: ~90% (https://www.gov.uk/government/statistics/reviews-of-markin
 Zero shot: 93%
 Multi shot: 88%
 Q W/Context shot: ?%
+Multi-modal: 97%
+Multi-prompt: ?%
 
 ## Learn More
 
