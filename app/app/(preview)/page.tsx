@@ -295,7 +295,7 @@ export default function ChatWithFiles() {
 						<Button
 							type="submit"
 							className="w-full"
-							disabled={files.length === 0 || files2.length === 0}
+							disabled={files.length === 0 || files2.length === 0 || isLoading}
 						>
 							{isLoading ? (
 								<span className="flex items-center space-x-2">

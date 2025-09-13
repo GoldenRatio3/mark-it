@@ -44,6 +44,7 @@ function toCsv(result: z.infer<typeof markResultSchema>): string {
 		'Marks Awarded',
 		'Total Marks',
 		'Confidence',
+		'Reason',
 		'Feedback',
 		'Overall Confidence',
 		'Total Marks Awarded',
@@ -59,6 +60,7 @@ function toCsv(result: z.infer<typeof markResultSchema>): string {
 		typeof q.confidence === 'number'
 			? `${(q.confidence * 100).toFixed(0)}%`
 			: '',
+		q.reason ?? '', // moved Reason before Feedback
 		q.feedback ?? '',
 		typeof result.overall_confidence === 'number'
 			? `${(result.overall_confidence * 100).toFixed(0)}%`
@@ -140,6 +142,10 @@ export default function MarkResult({
 	const [editingQuestion, setEditingQuestion] = useState<number | null>(null);
 	const [editingMarks, setEditingMarks] = useState<number>(0);
 	const [editingFeedback, setEditingFeedback] = useState<string>('');
+	// Track expanded/collapsed state for each question
+	const [expandedQuestions, setExpandedQuestions] = useState<Set<number>>(
+		() => new Set()
+	);
 
 	const percentage = Math.round(
 		(editableResult.total_marks_awarded /
@@ -189,6 +195,40 @@ export default function MarkResult({
 		setEditingQuestion(null);
 		setEditingMarks(0);
 		setEditingFeedback('');
+	};
+
+	const toggleExpand = (questionNumber: number) => {
+		setExpandedQuestions((prev) => {
+			const newSet = new Set(prev);
+			if (newSet.has(questionNumber)) {
+				newSet.delete(questionNumber);
+			} else {
+				newSet.add(questionNumber);
+			}
+			return newSet;
+		});
+	};
+
+	const allQuestionNumbers = editableResult.results.map(
+		(q) => q.question_number
+	);
+	const allExpanded = allQuestionNumbers.every((qNum) =>
+		expandedQuestions.has(qNum)
+	);
+	const anyExpanded = allQuestionNumbers.some((qNum) =>
+		expandedQuestions.has(qNum)
+	);
+
+	const handleExpandCollapseAll = () => {
+		setExpandedQuestions((prev) => {
+			if (allExpanded) {
+				// Collapse all
+				return new Set();
+			} else {
+				// Expand all
+				return new Set(allQuestionNumbers);
+			}
+		});
 	};
 
 	const baseFilename = `marking_results_${sanitizeForFilename(
@@ -273,119 +313,154 @@ export default function MarkResult({
 				</CardHeader>
 				<CardContent className="space-y-6">
 					<div className="space-y-4">
+						<div className="flex justify-end mb-2">
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={handleExpandCollapseAll}
+								aria-label={allExpanded ? 'Collapse All' : 'Expand All'}
+							>
+								{allExpanded ? 'Collapse All' : 'Expand All'}
+							</Button>
+						</div>
 						<h3 className="text-xl font-semibold">Question Results</h3>
-						{editableResult.results.map((question, index) => (
-							<Card key={index} className="p-4">
-								<div className="flex items-start justify-between mb-2">
-									<h4 className="font-medium">
-										Question {question.question_number}
-									</h4>
-									<div className="flex items-center space-x-2">
-										{editingQuestion === question.question_number ? (
-											<div className="flex items-center space-x-2">
-												<Input
-													type="number"
-													min="0"
-													max={question.total_marks}
-													value={editingMarks}
-													onChange={(e) =>
-														setEditingMarks(parseInt(e.target.value) || 0)
-													}
-													className="w-16 h-8 text-sm"
-												/>
-												<span className="text-sm">
-													/ {question.total_marks}
-												</span>
-											</div>
-										) : (
+						{editableResult.results.map((question, index) => {
+							const expanded = expandedQuestions.has(question.question_number);
+							return (
+								<Card key={index} className="p-4">
+									<div className="flex items-start justify-between mb-2">
+										<h4 className="font-medium">
+											Question {question.question_number}
+										</h4>
+										<div className="flex items-center space-x-2">
 											<Badge variant="outline">
 												{question.marks_awarded} / {question.total_marks}
 											</Badge>
-										)}
-										<Badge variant="secondary" className="text-xs">
-											Confidence: {(question.confidence * 100).toFixed(0)}%
-										</Badge>
-									</div>
-								</div>
-								{editingQuestion === question.question_number ? (
-									<div className="space-y-3">
-										<textarea
-											value={editingFeedback}
-											onChange={(e) => setEditingFeedback(e.target.value)}
-											className="w-full p-2 border rounded text-sm"
-											rows={3}
-										/>
-										<div className="flex gap-2">
+											<Badge variant="secondary" className="text-xs">
+												Confidence: {(question.confidence * 100).toFixed(0)}%
+											</Badge>
 											<Button
-												onClick={saveEdit}
+												variant="outline"
 												size="sm"
-												className="bg-green-600 hover:bg-green-700"
+												onClick={() => toggleExpand(question.question_number)}
+												aria-label={expanded ? 'Hide Details' : 'Show Details'}
 											>
-												Save
-											</Button>
-											<Button onClick={cancelEdit} variant="outline" size="sm">
-												Cancel
+												{expanded ? 'Hide Details' : 'Show Details'}
 											</Button>
 										</div>
 									</div>
-								) : (
-									<div>
-										<p className="text-sm text-muted-foreground mb-2">
-											{question.feedback}
-										</p>
-										{question.reason && (
-											<p className="text-xs text-muted-foreground mb-2">
-												<span className="font-semibold">Reason:</span>{' '}
-												{question.reason}
-											</p>
-										)}
-										<Button
-											onClick={() => startEditing(question.question_number)}
-											variant="outline"
-											size="sm"
-										>
-											Edit
-										</Button>
-									</div>
-								)}
-								{(question as any).source_references && (
-									<div className="mt-3 text-xs text-muted-foreground flex gap-4">
-										{buildPdfPageUrl(
-											studentPdfUrl,
-											(question as any).source_references?.student_page
-										) && (
-											<Link
-												href={
-													buildPdfPageUrl(
+									{expanded && (
+										<div>
+											{editingQuestion === question.question_number ? (
+												<div className="space-y-3">
+													<div className="flex items-center space-x-2">
+														<Input
+															type="number"
+															min="0"
+															max={question.total_marks}
+															value={editingMarks}
+															onChange={(e) =>
+																setEditingMarks(parseInt(e.target.value) || 0)
+															}
+															className="w-16 h-8 text-sm"
+														/>
+														<span className="text-sm">
+															/ {question.total_marks}
+														</span>
+													</div>
+													<textarea
+														value={editingFeedback}
+														onChange={(e) => setEditingFeedback(e.target.value)}
+														className="w-full p-2 border rounded text-sm"
+														rows={3}
+													/>
+													<div className="flex gap-2">
+														<Button
+															onClick={saveEdit}
+															size="sm"
+															className="bg-green-600 hover:bg-green-700"
+														>
+															Save
+														</Button>
+														<Button
+															onClick={cancelEdit}
+															variant="outline"
+															size="sm"
+														>
+															Cancel
+														</Button>
+													</div>
+												</div>
+											) : (
+												<div>
+													<p className="text-sm text-muted-foreground mb-2">
+														{question.feedback}
+													</p>
+													{question.reason && (
+														<p className="text-xs text-muted-foreground mb-2">
+															<span className="font-semibold">Reason:</span>{' '}
+															{question.reason}
+														</p>
+													)}
+													<Button
+														onClick={() =>
+															startEditing(question.question_number)
+														}
+														variant="outline"
+														size="sm"
+													>
+														Edit
+													</Button>
+												</div>
+											)}
+											{(question as any).source_references && (
+												<div className="mt-3 text-xs text-muted-foreground flex gap-4">
+													{buildPdfPageUrl(
 														studentPdfUrl,
 														(question as any).source_references?.student_page
-													) as string
-												}
-											>
-												View answer (p
-												{(question as any).source_references?.student_page})
-											</Link>
-										)}
-										{buildPdfPageUrl(
-											schemePdfUrl,
-											(question as any).source_references?.scheme_page
-										) && (
-											<Link
-												href={
-													buildPdfPageUrl(
+													) && (
+														<Link
+															href={
+																buildPdfPageUrl(
+																	studentPdfUrl,
+																	(question as any).source_references
+																		?.student_page
+																) as string
+															}
+														>
+															View answer (p
+															{
+																(question as any).source_references
+																	?.student_page
+															}
+															)
+														</Link>
+													)}
+													{buildPdfPageUrl(
 														schemePdfUrl,
 														(question as any).source_references?.scheme_page
-													) as string
-												}
-											>
-												View mark scheme (p
-												{(question as any).source_references?.scheme_page})
-											</Link>
-										)}
-									</div>
-								)}
-							</Card>
-						))}
+													) && (
+														<Link
+															href={
+																buildPdfPageUrl(
+																	schemePdfUrl,
+																	(question as any).source_references
+																		?.scheme_page
+																) as string
+															}
+														>
+															View mark scheme (p
+															{(question as any).source_references?.scheme_page}
+															)
+														</Link>
+													)}
+												</div>
+											)}
+										</div>
+									)}
+								</Card>
+							);
+						})}
 					</div>
 
 					{editableResult.general_feedback && (

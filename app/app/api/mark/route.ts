@@ -7,6 +7,118 @@ import { anthropic } from '@ai-sdk/anthropic';
 export const maxDuration = 60;
 export const runtime = 'nodejs';
 
+function processMarkingResults(results: any[]): {
+	appShape: any;
+	overallConfidence: number;
+} {
+	// Find the most common total_marks_awarded and total_marks_available
+	function mode(arr: any[]): any {
+		const freq: Record<string, number> = {};
+		arr.forEach((v: any) => {
+			const key = JSON.stringify(v);
+			freq[key] = (freq[key] || 0) + 1;
+		});
+		return arr.sort(
+			(a: any, b: any) => freq[JSON.stringify(b)] - freq[JSON.stringify(a)]
+		)[0];
+	}
+
+	const awardedArr = results.map((r: any) => r.object.total_marks_awarded);
+	const availableArr = results.map((r: any) => r.object.total_marks_available);
+	const mostCommonAwarded = mode(awardedArr);
+	const mostCommonAvailable = mode(availableArr);
+	const chosenIdx = results.findIndex(
+		(r: any) =>
+			r.object.total_marks_awarded === mostCommonAwarded &&
+			r.object.total_marks_available === mostCommonAvailable
+	);
+	const chosenResult = results[chosenIdx >= 0 ? chosenIdx : 0].object;
+
+	// Validation: Ensure individual question marks add up to the totals
+	const sumAwarded = chosenResult.results.reduce(
+		(sum: number, q: any) =>
+			sum + (typeof q.marks_awarded === 'number' ? q.marks_awarded : 0),
+		0
+	);
+	const sumAvailable = chosenResult.results.reduce(
+		(sum: number, q: any) =>
+			sum + (typeof q.total_marks === 'number' ? q.total_marks : 0),
+		0
+	);
+	if (
+		sumAwarded !== mostCommonAwarded ||
+		sumAvailable !== mostCommonAvailable
+	) {
+		console.warn(
+			`[validation] Mismatch in total marks: Awarded ${mostCommonAwarded} vs sum ${sumAwarded}, Available ${mostCommonAvailable} vs sum ${sumAvailable}`
+		);
+		// Override to match sum of individual questions
+		chosenResult.total_marks_awarded = sumAwarded;
+		chosenResult.total_marks_available = sumAvailable;
+	}
+
+	// Lower confidence if scores disagree for each question
+	const questionCount = chosenResult.results.length;
+	for (let i = 0; i < questionCount; i++) {
+		const questionMarks = results.map(
+			(r: any) => r.object.results[i]?.marks_awarded
+		);
+		const questionConfidences = results.map(
+			(r: any) => r.object.results[i]?.confidence
+		);
+		const uniqueQScores = new Set(
+			questionMarks.map((a: any) => JSON.stringify(a))
+		).size;
+		let avgConfidence =
+			questionConfidences
+				.filter((v: any) => typeof v === 'number')
+				.reduce((a: number, b: number) => a + b, 0) /
+			(questionConfidences.filter((v: any) => typeof v === 'number').length ||
+				1);
+		if (uniqueQScores === 1) {
+			chosenResult.results[i].confidence = avgConfidence;
+		} else if (uniqueQScores === 2) {
+			console.log(
+				`[POST] Question ${i + 1} has 2 unique scores, lowering confidence.`
+			);
+			chosenResult.results[i].confidence = avgConfidence * 0.7;
+		} else {
+			console.log(
+				`[POST] Question ${
+					i + 1
+				} has >2 unique scores, lowering confidence further.`
+			);
+			chosenResult.results[i].confidence = avgConfidence * 0.4;
+		}
+	}
+
+	// Compute overall confidence as the mean of all per-question confidences
+	const overallConfidence = (() => {
+		const vals = chosenResult.results
+			.map((r: any) => r?.confidence)
+			.filter((v: any) => typeof v === 'number');
+		if (vals.length === 0) return 0.0;
+		return vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
+	})();
+
+	const appShape = {
+		student_name: chosenResult.student_name,
+		results: (chosenResult.results as any[]).map((r: any) => ({
+			question_number: r.question_number,
+			marks_awarded: r.marks_awarded,
+			total_marks: r.total_marks,
+			feedback: r.feedback,
+			reason: r.reason,
+			confidence: r.confidence,
+		})),
+		total_marks_awarded: chosenResult.total_marks_awarded,
+		total_marks_available: chosenResult.total_marks_available,
+		general_feedback: chosenResult.general_feedback,
+		overall_confidence: overallConfidence,
+	};
+	return { appShape, overallConfidence };
+}
+
 export async function POST(req: Request) {
 	try {
 		console.log('[POST] Marking request received');
@@ -108,121 +220,23 @@ export async function POST(req: Request) {
 			results.map((r) => r?.object?.total_marks_awarded)
 		);
 
-		// Find the most common total_marks_awarded and total_marks_available
-		function mode(arr: any[]) {
-			const freq: Record<string, number> = {};
-			arr.forEach((v) => {
-				const key = JSON.stringify(v);
-				freq[key] = (freq[key] || 0) + 1;
-			});
-			return arr.sort(
-				(a, b) => freq[JSON.stringify(b)] - freq[JSON.stringify(a)]
-			)[0];
-		}
-
-		const awardedArr = results.map((r) => r.object.total_marks_awarded);
-		const availableArr = results.map((r) => r.object.total_marks_available);
-		const mostCommonAwarded = mode(awardedArr);
-		const mostCommonAvailable = mode(availableArr);
-		console.log(
-			'[POST] Most common awarded:',
-			mostCommonAwarded,
-			'Most common available:',
-			mostCommonAvailable
-		);
-
-		// Use the result with the most common score for feedback/details
-		const chosenIdx = results.findIndex(
-			(r) =>
-				r.object.total_marks_awarded === mostCommonAwarded &&
-				r.object.total_marks_available === mostCommonAvailable
-		);
-		const chosenResult = results[chosenIdx >= 0 ? chosenIdx : 0].object;
-
-		// Validation: Ensure individual question marks add up to the totals
-		const sumAwarded = chosenResult.results.reduce(
-			(sum, q) =>
-				sum + (typeof q.marks_awarded === 'number' ? q.marks_awarded : 0),
-			0
-		);
-		const sumAvailable = chosenResult.results.reduce(
-			(sum, q) => sum + (typeof q.total_marks === 'number' ? q.total_marks : 0),
-			0
-		);
-		if (
-			sumAwarded !== mostCommonAwarded ||
-			sumAvailable !== mostCommonAvailable
-		) {
-			console.warn(
-				`[validation] Mismatch in total marks: Awarded ${mostCommonAwarded} vs sum ${sumAwarded}, Available ${mostCommonAvailable} vs sum ${sumAvailable}`
-			);
-			// TODO: temp fix: override to match sum of individual questions
-			chosenResult.total_marks_awarded = sumAwarded;
-			chosenResult.total_marks_available = sumAvailable;
-		}
-
-		// Lower confidence if scores disagree for each question
-		const questionCount = chosenResult.results.length;
-		for (let i = 0; i < questionCount; i++) {
-			const questionMarks = results.map(
-				(r) => r.object.results[i]?.marks_awarded
-			);
-			const questionConfidences = results.map(
-				(r) => r.object.results[i]?.confidence
-			);
-			const uniqueQScores = new Set(questionMarks.map((a) => JSON.stringify(a)))
-				.size;
-			let avgConfidence =
-				questionConfidences
-					.filter((v) => typeof v === 'number')
-					.reduce((a, b) => a + b, 0) /
-				(questionConfidences.filter((v) => typeof v === 'number').length || 1);
-			if (uniqueQScores === 1) {
-				// All agree, keep confidence
-				chosenResult.results[i].confidence = avgConfidence;
-			} else if (uniqueQScores === 2) {
-				console.log(
-					`[POST] Question ${i + 1} has 2 unique scores, lowering confidence.`
-				);
-				chosenResult.results[i].confidence = avgConfidence * 0.7;
-			} else {
-				console.log(
-					`[POST] Question ${
-						i + 1
-					} has >2 unique scores, lowering confidence further.`
-				);
-				chosenResult.results[i].confidence = avgConfidence * 0.4;
-			}
-		}
-
-		// Compute overall confidence as the mean of all per-question confidences
-		const overallConfidence = (() => {
-			const vals = chosenResult.results
-				.map((r: any) => r?.confidence)
-				.filter((v: any) => typeof v === 'number');
-			if (vals.length === 0) return 0.0;
-			return vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
-		})();
+		const { appShape, overallConfidence } = processMarkingResults(results);
 		console.log('[POST] Overall confidence:', overallConfidence);
 
-		// Coerce/augment to full app schema shape without debug info
-		const appShape = {
-			student_name: chosenResult.student_name,
-			results: (chosenResult.results as any[]).map((r) => ({
-				question_number: r.question_number,
-				marks_awarded: r.marks_awarded,
-				total_marks: r.total_marks,
-				feedback: r.feedback,
-				reason: r.reason,
-				confidence: r.confidence,
-			})),
-			total_marks_awarded: chosenResult.total_marks_awarded,
-			total_marks_available: chosenResult.total_marks_available,
-			general_feedback: chosenResult.general_feedback,
-			overall_confidence: overallConfidence,
-		};
-		console.log('[POST] Returning result:', appShape);
+		// Retry once if overall confidence is less than 70%
+		if (overallConfidence < 0.7) {
+			console.log('[POST] Overall confidence < 70%, retrying once...');
+			const retryResults = await Promise.all(markingPromises);
+			const {
+				appShape: retryAppShape,
+				overallConfidence: retryOverallConfidence,
+			} = processMarkingResults(retryResults);
+			console.log('[POST] (retry) Overall confidence:', retryOverallConfidence);
+			console.log('[POST] Returning result (retry):', retryAppShape);
+			return Response.json(retryAppShape);
+		}
 
+		console.log('[POST] Returning result:', appShape);
 		return Response.json(appShape);
 	} catch (err: any) {
 		console.error('Marking error:', err);
